@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portfolio Ledger</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root{
+    --bg:#14171C;
+    --surface:#1C2027;
+    --surface-2:#232830;
+    --border:#2E333C;
+    --gold:#D4A73C;
+    --green:#4FA876;
+    --red:#C9564B;
+    --text:#E8E6E1;
+    --muted:#8B8F98;
+    --mono:'IBM Plex Mono', 'SFMono-Regular', Menlo, monospace;
+    --sans:-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:var(--sans); padding:16px 14px 40px;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1{font-size:15px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:0 0 4px;}
+  .eyebrow{font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--gold);}
+  .big-number{font-family:var(--mono); font-size:34px; font-weight:600; margin:2px 0 14px; letter-spacing:-.02em;}
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:12px;}
+  label{display:block; font-size:12px; color:var(--muted); margin-bottom:6px; letter-spacing:.02em;}
+  input, select{
+    width:100%; background:var(--surface-2); border:1px solid var(--border); color:var(--text);
+    padding:11px 12px; border-radius:7px; font-size:15px; font-family:var(--mono); margin-bottom:12px;
+  }
+  input:focus, select:focus{outline:none; border-color:var(--gold);}
+  button{
+    width:100%; background:var(--gold); color:#14171C; border:none; border-radius:7px;
+    padding:13px; font-size:14px; font-weight:700; letter-spacing:.02em; cursor:pointer;
+  }
+  button.secondary{background:transparent; border:1px solid var(--border); color:var(--text); margin-top:8px;}
+  button.small{width:auto; padding:6px 12px; font-size:12px; border-radius:6px;}
+  button.sell{background:var(--red); color:#fff;}
+  button.buy{background:var(--green); color:#0e1512;}
+  button.ghost{background:transparent; border:1px solid var(--border); color:var(--muted); margin-top:0;}
+  .asset-head-actions{display:flex; align-items:center; gap:8px;}
+  .hidden{display:none !important;}
+  .row-list{margin-top:4px;}
+  .row-item{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:8px 0; border-bottom:1px solid var(--border); font-family:var(--mono); font-size:13px;
+  }
+  .row-item:last-child{border-bottom:none;}
+
+  /* --- Кольцо распределения (conic-gradient, без внешних библиотек) --- */
+  .ring-wrap{display:flex; align-items:center; gap:18px;}
+  .ring{
+    width:112px; height:112px; border-radius:50%; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .ring-inner{
+    width:76px; height:76px; border-radius:50%; background:var(--surface);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+  }
+  .ring-inner .lbl{font-size:9px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase;}
+  .ring-inner .val{font-family:var(--mono); font-size:15px; font-weight:700;}
+  .legend{flex:1;}
+  .legend-item{display:flex; align-items:center; gap:8px; font-size:12px; margin-bottom:5px; font-family:var(--mono);}
+  .swatch{width:9px; height:9px; border-radius:2px; flex-shrink:0;}
+
+  /* --- Строка актива с полосой отклонения от target --- */
+  .asset-card{border-bottom:1px solid var(--border); padding:14px 0;}
+  .asset-card:last-child{border-bottom:none;}
+  .asset-head{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:2px;}
+  .asset-name{font-weight:700; font-size:14px; letter-spacing:.02em;}
+  .asset-value{font-family:var(--mono); font-size:13px; color:var(--muted);}
+  .asset-sub{font-family:var(--mono); font-size:11px; color:var(--muted); margin-bottom:8px;}
+  .deviation-track{
+    position:relative; height:8px; background:var(--surface-2); border-radius:4px; margin-bottom:8px; overflow:visible;
+  }
+  .deviation-fill{position:absolute; top:0; bottom:0; border-radius:4px;}
+  .target-tick{
+    position:absolute; top:-3px; bottom:-3px; width:2px; background:var(--gold);
+  }
+  .action-row{display:flex; justify-content:space-between; align-items:center; margin-top:6px;}
+  .action-text{font-size:12px; color:var(--muted); font-family:var(--mono);}
+  .action-text.sell{color:var(--red);}
+  .action-text.buy{color:var(--green);}
+  .target-edit{display:flex; align-items:center; gap:6px; margin-top:8px;}
+  .target-edit input{width:64px; margin-bottom:0; padding:6px 8px; font-size:12px;}
+  .target-edit button{width:auto; margin-top:0; padding:6px 10px; font-size:11px;}
+  .target-edit .lbl2{font-size:11px; color:var(--muted); font-family:var(--mono);}
+  .updated-at{font-family:var(--mono); font-size:11px; color:var(--muted); margin:2px 0 4px;}
+
+  #screen-assets .row-list{margin-bottom:14px;}
+  .dev-banner{
+    background:#3A2E14; border:1px solid var(--gold); color:var(--gold);
+    font-family:var(--mono); font-size:11px; letter-spacing:.03em;
+    padding:8px 12px; border-radius:7px; margin-bottom:14px; text-align:center;
+  }
+</style>
+</head>
+<body>
+
+<div id="dev-banner" class="dev-banner hidden">
+  ЛОКАЛЬНЫЙ ТЕСТОВЫЙ РЕЖИМ — не внутри Telegram, данные пишутся под тестовым пользователем
+</div>
+
+<!-- ЭКРАН 0: депозит -->
+<div id="screen-deposit">
+  <div class="eyebrow">Шаг 1 / 3</div>
+  <h1>Стартовый капитал</h1>
+  <div class="card">
+    <label for="deposit-input">Сумма депозита, $</label>
+    <input id="deposit-input" type="number" inputmode="decimal" placeholder="1000">
+    <button onclick="submitDeposit()">Продолжить</button>
+  </div>
+  <button class="secondary" onclick="goToDashboard()">Готово — открыть портфель →</button>
+</div>
+
+<!-- ЭКРАН 1: добавление активов -->
+<div id="screen-assets" class="hidden">
+  <div class="eyebrow">Шаг 2 / 3</div>
+  <h1>Целевой портфель</h1>
+  <div class="card">
+    <label for="asset-name">Актив</label>
+    <input id="asset-name" type="text" placeholder="gold">
+    <label for="asset-price">Текущая цена, $</label>
+    <input id="asset-price" type="number" inputmode="decimal" placeholder="4065">
+    <label for="asset-target">Доля в портфеле, %</label>
+    <input id="asset-target" type="number" inputmode="decimal" placeholder="10">
+    <button onclick="submitAsset()">Добавить актив</button>
+    <div class="row-list" id="added-assets"></div>
+  </div>
+  <button class="secondary" onclick="goToDashboard()">Готово — открыть портфель →</button>
+</div>
+
+<!-- ЭКРАН 2: дашборд -->
+<div id="screen-dashboard" class="hidden">
+  <div class="eyebrow">Портфель</div>
+  <div class="updated-at" id="updated-at"></div>
+  <div class="big-number" id="total-value">$0</div>
+
+  <div class="card ring-wrap">
+    <div class="ring" id="ring"><div class="ring-inner">
+      <div class="lbl">USDT</div>
+      <div class="val" id="usdt-in-ring">$0</div>
+    </div></div>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <div class="card">
+    <div class="eyebrow" style="margin-bottom:10px;">Активы, USDT и отклонение от target</div>
+    <div id="asset-cards"></div>
+  </div>
+
+  <div class="card">
+    <div class="eyebrow" style="margin-bottom:10px;">Обновить цену</div>
+    <label for="update-select">Актив</label>
+    <select id="update-select"></select>
+    <label for="update-price">Новая цена, $</label>
+    <input id="update-price" type="number" inputmode="decimal" placeholder="4200">
+    <button onclick="submitPriceUpdate()">Пересчитать</button>
+  </div>
+
+  <div class="card">
+    <div class="eyebrow" style="margin-bottom:10px;">Пополнить USDT</div>
+    <label for="usdt-amount">Сумма, $</label>
+    <input id="usdt-amount" type="number" inputmode="decimal" placeholder="200">
+    <button onclick="submitAddUsdt()">Пополнить</button>
+  </div>
+
+  <button class="secondary" onclick="showScreen('assets')">+ Добавить ещё актив</button>
+</div>
+
+<script>
+const tg = window.Telegram?.WebApp;
+tg?.ready();
+tg?.expand();
+const initData = tg?.initData || "";
+if(!initData){
+  document.getElementById("dev-banner").classList.remove("hidden");
+}
+const RING_COLORS = ["#D4A73C","#4FA876","#7C93C9","#C9564B","#B884D6","#6FB8C9","#D68F4E","#9AA5B1","#E0C168","#5E8FA6"];
+
+async function api(path, body){
+  const res = await fetch(path, {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({init_data: initData, ...body})
+  });
+  if(!res.ok){ const t = await res.text(); alert("Ошибка: " + t); throw new Error(t); }
+  return res.json();
+}
+
+function showScreen(name){
+  ["deposit","assets","dashboard"].forEach(s=>{
+    document.getElementById("screen-"+s).classList.toggle("hidden", s!==name);
+  });
+}
+
+async function submitDeposit(){
+  const deposit = parseFloat(document.getElementById("deposit-input").value);
+  if(!deposit || deposit<=0){ alert("Введите сумму депозита"); return; }
+  await api("/api/deposit", {deposit});
+  showScreen("assets");
+}
+
+async function submitAsset(){
+  const name = document.getElementById("asset-name").value.trim();
+  const price = parseFloat(document.getElementById("asset-price").value);
+  const target_pct = parseFloat(document.getElementById("asset-target").value);
+  if(!name || !price || !target_pct){ alert("Заполните все поля"); return; }
+  const r = await api("/api/asset", {name, price, target_pct});
+  const list = document.getElementById("added-assets");
+  const div = document.createElement("div");
+  div.className = "row-item";
+  div.innerHTML = `<span>${name} · ${target_pct}%</span><span>${r.quantity.toFixed(4)} шт</span>`;
+  list.appendChild(div);
+  document.getElementById("asset-name").value="";
+  document.getElementById("asset-price").value="";
+  document.getElementById("asset-target").value="";
+}
+
+async function goToDashboard(){
+  showScreen("dashboard");
+  await refreshDashboard();
+}
+
+function sortByValueDesc(assets){
+  return [...assets].sort((a,b)=> b.value - a.value);
+}
+
+function updateTimestamp(iso){
+  const el = document.getElementById("updated-at");
+  if(!iso){ el.textContent = ""; return; }
+  const d = new Date(iso);
+  el.textContent = "изменено: " + d.toLocaleString("ru-RU", {
+    day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit"
+  });
+}
+
+function renderPortfolio(p){
+  const sorted = sortByValueDesc(p.assets);
+  document.getElementById("total-value").textContent = "$"+p.total_value.toFixed(0);
+  renderRing(sorted, p.usdt_balance, p.total_value);
+  renderAssetCards(sorted, p.usdt_balance, p.total_value);
+  updateTimestamp(p.updated_at);
+}
+
+function renderRing(assets, usdt, total){
+  const ring = document.getElementById("ring");
+  const legend = document.getElementById("legend");
+  let stops = []; let acc = 0;
+  assets.forEach((a,i)=>{
+    const pct = total>0 ? (a.value/total*100) : 0;
+    stops.push(`${RING_COLORS[i%RING_COLORS.length]} ${acc}% ${acc+pct}%`);
+    acc += pct;
+  });
+  const usdtPct = 100-acc;
+  stops.push(`#3A4048 ${acc}% 100%`);
+  ring.style.background = `conic-gradient(${stops.join(",")})`;
+  document.getElementById("usdt-in-ring").textContent = "$"+usdt.toFixed(0);
+
+  legend.innerHTML = "";
+  assets.forEach((a,i)=>{
+    const item = document.createElement("div");
+    item.className = "legend-item";
+    item.innerHTML = `<span class="swatch" style="background:${RING_COLORS[i%RING_COLORS.length]}"></span>${a.name} · ${a.current_pct.toFixed(1)}%`;
+    legend.appendChild(item);
+  });
+  const usdtItem = document.createElement("div");
+  usdtItem.className = "legend-item";
+  usdtItem.innerHTML = `<span class="swatch" style="background:#3A4048"></span>USDT · ${usdtPct.toFixed(1)}%`;
+  legend.appendChild(usdtItem);
+}
+
+function renderAssetCards(assets, usdt, total){
+  const wrap = document.getElementById("asset-cards");
+  wrap.innerHTML = "";
+
+  // Карточка USDT — всегда первая в списке
+  const usdtPct = total>0 ? (usdt/total*100) : 0;
+  const usdtCard = document.createElement("div");
+  usdtCard.className = "asset-card";
+  usdtCard.innerHTML = `
+    <div class="asset-head">
+      <span class="asset-name">USDT (ликвидность)</span>
+      <span class="asset-value">$${usdt.toFixed(2)}</span>
+    </div>
+    <div class="asset-sub">${usdtPct.toFixed(1)}% портфеля · используется для докупок при просадках</div>
+  `;
+  wrap.appendChild(usdtCard);
+
+  assets.forEach(a=>{
+    const card = document.createElement("div");
+    card.className = "asset-card";
+
+    // позиция полосы: 0-target-current в диапазоне [0, max(target,current)*1.4]
+    const maxScale = Math.max(a.target_pct, a.current_pct, 5) * 1.4;
+    const targetPos = (a.target_pct/maxScale*100).toFixed(1);
+    const currentWidth = (a.current_pct/maxScale*100).toFixed(1);
+    const fillColor = a.diff_pct >= 3 ? "var(--red)" : (a.diff_pct <= -3 ? "var(--green)" : "var(--gold)");
+
+    let actionHtml = `<span class="action-text">в пределах target</span>`;
+    let btnHtml = "";
+    if(a.action === "sell"){
+      actionHtml = `<span class="action-text sell">продать ${a.action_qty} (≈$${a.action_value})</span>`;
+      btnHtml = `<button class="small sell" onclick="executeAction('${a.name}')">Продать</button>`;
+    } else if(a.action === "buy"){
+      actionHtml = `<span class="action-text buy">докупить ${a.action_qty} (≈$${a.action_value})</span>`;
+      btnHtml = `<button class="small buy" onclick="executeAction('${a.name}')">Купить</button>`;
+    }
+
+    card.innerHTML = `
+      <div class="asset-head">
+        <span class="asset-name">${a.name}</span>
+        <div class="asset-head-actions">
+          <span class="asset-value">$${a.value}</span>
+          <button class="small ghost" onclick="deleteAsset('${a.name}')">✕</button>
+        </div>
+      </div>
+      <div class="asset-sub">цена $${a.current_price} · ${a.current_pct}% факт / ${a.target_pct}% target</div>
+      <div class="deviation-track">
+        <div class="deviation-fill" style="width:${currentWidth}%; background:${fillColor}"></div>
+        <div class="target-tick" style="left:${targetPos}%"></div>
+      </div>
+      <div class="action-row">${actionHtml}${btnHtml}</div>
+      <div class="target-edit">
+        <span class="lbl2">target →</span>
+        <input type="number" inputmode="decimal" id="target-input-${a.name}" value="${a.target_pct}">
+        <span class="lbl2">%</span>
+        <button class="ghost" onclick="saveTarget('${a.name}')">Сохранить</button>
+      </div>
+    `;
+    wrap.appendChild(card);
+  });
+
+  const select = document.getElementById("update-select");
+  select.innerHTML = assets.map(a=>`<option value="${a.name}">${a.name}</option>`).join("");
+}
+
+async function saveTarget(name){
+  const input = document.getElementById(`target-input-${name}`);
+  const target_pct = parseFloat(input.value);
+  if(!target_pct || target_pct<=0){ alert("Укажите target % больше нуля"); return; }
+  const p = await api("/api/asset/target", {name, target_pct});
+  renderPortfolio(p);
+}
+
+async function deleteAsset(name){
+  if(!confirm(`Удалить ${name}? Его текущая стоимость будет зачислена в USDT.`)) return;
+  const p = await api("/api/asset/delete", {name, refund_to_usdt: true});
+  renderPortfolio(p);
+}
+
+async function submitAddUsdt(){
+  const amount = parseFloat(document.getElementById("usdt-amount").value);
+  if(!amount || amount<=0){ alert("Введите сумму пополнения"); return; }
+  const p = await api("/api/usdt/add", {amount});
+  renderPortfolio(p);
+  document.getElementById("usdt-amount").value = "";
+}
+
+async function refreshDashboard(){
+  const p = await api("/api/portfolio", {});
+  renderPortfolio(p);
+}
+
+async function submitPriceUpdate(){
+  const name = document.getElementById("update-select").value;
+  const price = parseFloat(document.getElementById("update-price").value);
+  if(!name || !price){ alert("Выберите актив и укажите цену"); return; }
+  const p = await api("/api/price", {name, price});
+  renderPortfolio(p);
+  document.getElementById("update-price").value = "";
+}
+
+async function executeAction(name){
+  const p = await api("/api/execute", {name});
+  renderPortfolio(p);
+}
+
+(async function init(){
+  try{
+    const p = await api("/api/portfolio", {});
+    if(p.deposit > 0){
+      showScreen("dashboard");
+      renderPortfolio(p);
+    }
+  }catch(e){ /* портфеля ещё нет — остаёмся на экране депозита */ }
+})();
+</script>
+</body>
+</html>
